@@ -2,9 +2,9 @@
 
 ## Descrição
 
-Este projeto é uma API REST em Python para compartilhar receitas entre chefs e usuários autenticados. A aplicação centraliza o cadastro de perfis, autenticação por JWT, criação e gerenciamento de receitas, além de controles de autorização, paginação, cache e rate limit.
+Este projeto é uma API REST em Python para compartilhar receitas entre chefs e usuários autenticados. A aplicação centraliza o cadastro de perfis, autenticação por JWT, criação e gerenciamento de receitas, além de controles de autorização, paginação, cache, rate limit e upload de imagens para cada receita.
 
-A ideia principal é permitir que um chef cadastre seu perfil, faça login com segurança e gerencie suas receitas de forma isolada, sem que outros chefs possam alterar ou remover conteúdo que não lhes pertença.
+A ideia principal é permitir que um chef cadastre seu perfil, faça login com segurança e gerencie suas receitas de forma isolada, sem que outros chefs possam alterar ou remover conteúdo que não lhes pertença. As receitas agora podem incluir uma imagem associada, armazenada em um bucket S3 compatível com LocalStack em ambiente de desenvolvimento.
 
 ## Tecnologias utilizadas
 
@@ -15,6 +15,7 @@ A ideia principal é permitir que um chef cadastre seu perfil, faça login com s
 - MySQL 8.4
 - MongoDB 7.0
 - Redis 7.2
+- LocalStack + S3 compatível
 - Docker / Docker Compose
 - Poetry
 - PyJWT
@@ -24,6 +25,7 @@ A ideia principal é permitir que um chef cadastre seu perfil, faça login com s
 - mysql-connector-python
 - pymongo
 - redis[hiredis]
+- boto3
 - Ruff
 
 ## Como funciona na prática
@@ -89,13 +91,14 @@ curl -X GET http://localhost:8000/v1/chefs/me \
   -H "Authorization: Bearer <TOKEN>"
 ```
 
-### 4. Criar uma receita
+### 4. Criar uma receita com imagem opcional
+
+A criação e a atualização de receitas agora usam multipart/form-data. O campo `recipe_data` recebe o JSON da receita e o campo `image` pode conter um arquivo de imagem opcional.
 
 ```bash
 curl -X POST http://localhost:8000/v1/recipes/ \
   -H "Authorization: Bearer <TOKEN>" \
-  -H "Content-Type: application/json" \
-  -d '{
+  -F 'recipe_data={
     "recipe_name": "Pão caseiro",
     "description": "Receita simples",
     "prep_time": "00:45:00",
@@ -105,8 +108,11 @@ curl -X POST http://localhost:8000/v1/recipes/ \
     "ingredients": [
       {"ingredient_name": "farinha", "quantity": "500g"}
     ]
-  }'
+  }' \
+  -F 'image=@/caminho/para/pao.jpg'
 ```
+
+Quando a imagem é enviada, a API armazena a URL pública do objeto no campo `image_url` da receita. O mesmo padrão vale para `PUT /v1/recipes/{recipe_id}`.
 
 ## Endpoints principais
 
@@ -122,12 +128,12 @@ curl -X POST http://localhost:8000/v1/recipes/ \
 
 ### Receita
 
-- `POST /v1/recipes/` - cria uma receita para o chef autenticado
+- `POST /v1/recipes/` - cria uma receita para o chef autenticado com suporte a multipart/form-data e upload opcional de imagem
 - `GET /v1/recipes/` - lista receitas com paginação
 - `GET /v1/recipes/my_recipes` - lista as receitas do chef autenticado
 - `GET /v1/recipes/{recipe_id}` - busca uma receita por ID
-- `PUT /v1/recipes/{recipe_id}` - atualiza uma receita do chef autenticado
-- `DELETE /v1/recipes/{recipe_id}` - remove uma receita do chef autenticado
+- `PUT /v1/recipes/{recipe_id}` - atualiza uma receita do chef autenticado, podendo trocar ou manter a imagem atual
+- `DELETE /v1/recipes/{recipe_id}` - remove uma receita do chef autenticado e exclui a imagem do storage associada
 
 ## Documentação interativa
 
@@ -151,11 +157,12 @@ A API está versionada por URL com o prefixo `/v1`, o que permite evoluções fu
 - Rotas sensíveis exigem o chef autenticado.
 - A autorização é validada no backend para garantir que um chef só possa alterar ou excluir seus próprios dados e receitas.
 
-### Banco de dados
+### Banco de dados e armazenamento
 
 - MySQL: usado para dados estruturados de chef e autenticação.
 - MongoDB: usado para armazenar receitas em documentos.
 - Redis: usado como cache em memória para consultas frequentes e invalidação após alterações.
+- S3 compatível: as imagens das receitas são enviadas para um bucket S3 via LocalStack em desenvolvimento (configurado com `AWS_S3_ENDPOINT_URL` e variáveis do AWS SDK).
 
 ### Cache
 
@@ -197,6 +204,7 @@ O projeto utiliza Docker Compose para orquestrar os serviços principais da apli
 - MySQL
 - MongoDB
 - Redis
+- LocalStack (S3 compatível para armazenamento de imagens)
 
 ## Configuração / variáveis de ambiente
 
@@ -236,4 +244,10 @@ ACCESS_TOKEN_EXPIRE_MINUTES=60
 SECRET_KEY=my_secret_key
 ALGORITHM=HS256
 PORT=8000
+
+AWS_S3_BUCKET=recipes
+AWS_S3_ENDPOINT_URL=http://localstack:4566
+AWS_DEFAULT_REGION=us-east-1
+AWS_ACCESS_KEY_ID=test
+AWS_SECRET_ACCESS_KEY=test
 ```
