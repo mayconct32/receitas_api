@@ -5,19 +5,20 @@ from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 
 from src.database import MongoDBConnection, MysqlDBConnection, RedisConnection
 from src.interfaces.connection_db import IDBConnection
-from src.interfaces.repository import IChefRepository,IRecipeRepository
+from src.interfaces.repository import IChefRepository, IRecipeRepository
+from src.interfaces.storage import IStorage
 from src.repositories.chef_repository import ChefRepository
 from src.repositories.recipe_repository import RecipeRepository
 from src.repositories.redis_repository import RedisRepository
 from src.services.auth_service import AuthService
 from src.services.chef_service import ChefService
 from src.services.recipe_service import RecipeService
+from src.services.storage_service import LocalstackS3Storage
 
 
 def get_redis_repository() -> RedisRepository:
-    return RedisRepository(
-        RedisConnection()
-    )
+    return RedisRepository(RedisConnection())
+
 
 def get_mysql_connection() -> IDBConnection:
     return MysqlDBConnection()
@@ -27,25 +28,29 @@ def get_mongodb_connection() -> IDBConnection:
     return MongoDBConnection()
 
 
+def get_storage_service() -> IStorage:
+    return LocalstackS3Storage()
+
+
 # Chef Dependecies
 def get_chef_repository(
-    connection: IDBConnection = Depends(get_mysql_connection)
+    connection: IDBConnection = Depends(get_mysql_connection),
 ) -> IChefRepository:
     return ChefRepository(connection)
 
 
 def get_chef_service(
     chef_repository: IChefRepository = Depends(get_chef_repository),
-    redis_repository: RedisRepository = Depends(get_redis_repository)
+    redis_repository: RedisRepository = Depends(get_redis_repository),
 ) -> ChefService:
-    return ChefService(chef_repository,redis_repository)
+    return ChefService(chef_repository, redis_repository)
 
 
 def get_auth_service(
     chef_repository: IChefRepository = Depends(get_chef_repository),
-    redis_repository: RedisRepository = Depends(get_redis_repository)
+    redis_repository: RedisRepository = Depends(get_redis_repository),
 ) -> AuthService:
-    return AuthService(chef_repository,redis_repository)
+    return AuthService(chef_repository, redis_repository)
 
 
 async def get_current_chef(
@@ -64,10 +69,10 @@ def get_recipe_repository(
 
 def get_recipe_service(
     repository: IRecipeRepository = Depends(get_recipe_repository),
-    redis_repository: RedisRepository = Depends(get_redis_repository)
+    redis_repository: RedisRepository = Depends(get_redis_repository),
+    image_storage: IStorage = Depends(get_storage_service),
 ) -> RecipeService:
-    return RecipeService(repository,redis_repository) 
-
+    return RecipeService(repository, redis_repository, image_storage=image_storage)
 
 
 ChefServiceDep = Annotated[ChefService, Depends(get_chef_service)]

@@ -50,7 +50,7 @@ Resposta esperada:
 ### Opção 1: com Docker
 
 ```bash
-docker compose up --build
+docker compose up 
 ```
 
 ### Opção 2: localmente

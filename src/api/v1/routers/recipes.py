@@ -1,6 +1,7 @@
 from typing import List
+from http import HTTPStatus
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, File, Form, Request, UploadFile, HTTPException
 
 from src.dependencies import CurrentChef, RecipeServiceDep
 from src.models.recipe import Recipe, ResponseRecipe
@@ -47,11 +48,22 @@ async def get_recipe(
 @limiter.limit("3/minute")
 async def add_recipe(
     request: Request,
-    recipe: Recipe,
     current_chef: CurrentChef,
     recipe_service: RecipeServiceDep,
+    recipe_data: str = Form(...),
+    image: UploadFile | None = File(default=None),
 ):
-    return await recipe_service.add_recipe(recipe, current_chef["chef_id"])
+    try:
+        recipe = Recipe.from_json(recipe_data)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=HTTPStatus.UNPROCESSABLE_CONTENT, 
+            detail=str(exc)
+        ) from exc
+
+    return await recipe_service.add_recipe(
+        recipe, current_chef["chef_id"], image=image
+    )
 
 
 @app.delete("/{recipe_id}")
@@ -74,8 +86,18 @@ async def update_recipe(
     recipe_service: RecipeServiceDep,
     current_chef: CurrentChef,
     recipe_id: str,
-    recipe: Recipe,
+    recipe_data: str = Form(...),
+    image: UploadFile | None = File(default=None),
 ):
+    try:
+        recipe = Recipe.from_json(recipe_data)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=HTTPStatus.UNPROCESSABLE_CONTENT, 
+            detail=str(exc)
+        ) from exc
+
     return await recipe_service.update_recipe(
-        current_chef["chef_id"], recipe_id, recipe
+        current_chef["chef_id"], recipe_id, recipe, image=image
     )
+
