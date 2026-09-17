@@ -60,6 +60,7 @@ async def add_chef(
 async def auth_chef(
     request: Request, form_data: AuthRequestForm, auth_service: AuthServiceDep
 ):
+    await auth_service.check_authentication(form_data)
     token = await auth_service.create_access_token(form_data)
     return {"access_token": token, "token_type": "bearer"}
 

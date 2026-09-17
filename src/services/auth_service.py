@@ -7,13 +7,22 @@ from jwt import InvalidTokenError, decode, encode
 from src.interfaces.repository import IChefRepository
 from src.repositories.redis_repository import RedisRepository
 from src.models.auth import FormData
-from src.exceptions import CredentialsError
+from src.exceptions import AuthenticationError, CredentialsError
+from src.utils import verify_password
 
 
 class AuthService:
     def __init__(self, chef_repository: IChefRepository, redis_repository: RedisRepository) -> None:
         self.chef_repository = chef_repository
         self.redis_repository = redis_repository
+
+    async def check_authentication(self, form_data: FormData):
+        chef = await self.chef_repository.get_by_email(email=form_data.username)
+        if not chef or not verify_password(form_data.password, chef["password_hash"]):
+            raise AuthenticationError(
+                message="Incorrect username or password!",
+                status_code=HTTPStatus.FORBIDDEN,
+            )
 
     @staticmethod
     async def create_access_token(form_data: FormData):

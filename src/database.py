@@ -15,6 +15,7 @@ load_dotenv(override=True)
 class MysqlDBConnection(IDBConnection):
     def __init__(self):
         self._host = os.getenv("MYSQL_HOST")
+        self._port = int(os.getenv("MYSQL_PORT", "3306"))
         self._user = os.getenv("MYSQL_USER")
         self._password = os.getenv("MYSQL_PASSWORD")
         self._database = os.getenv("MYSQL_DATABASE")
@@ -25,6 +26,7 @@ class MysqlDBConnection(IDBConnection):
             pool_size=self._pool_size,
             pool_reset_session=True,
             host=self._host,
+            port=self._port,
             user=self._user,
             password=self._password,
             database=self._database,
