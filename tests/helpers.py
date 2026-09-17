@@ -75,3 +75,82 @@ def create_authenticated_chef(
     return created, headers
 
 
+def build_recipe_payload(
+    *,
+    name: str = "Homemade bread",
+    description: str = "Simple recipe",
+    prep_time: str = "00:45:00",
+    instructions: list[dict] | None = None,
+    ingredients: list[dict] | None = None,
+) -> dict:
+    return {
+        "recipe_name": name,
+        "description": description,
+        "prep_time": prep_time,
+        "instructions": instructions or [
+            {
+                "step_number": 1,
+                "description": "Mix the ingredients",
+            }
+        ],
+        "ingredients": ingredients or [
+            {
+                "ingredient_name": "flour",
+                "quantity": "500g",
+            }
+        ],
+    }
+
+
+def recipe_payload(*, name: str = "Homemade bread") -> dict:
+    return build_recipe_payload(name=name)
+
+
+def create_recipe(
+    client: TestClient,
+    headers: dict[str, str],
+    *,
+    name: str = "Homemade bread",
+    image_name: str = "bread.jpg",
+) -> dict:
+    response = client.post(
+        "/v1/recipes/",
+        data={
+            "recipe_data": json.dumps(recipe_payload(name=name)),
+        },
+        files={
+            "image": (
+                image_name,
+                BytesIO(b"fake-image"),
+                "image/jpeg",
+            )
+        },
+        headers=headers,
+    )
+    assert response.status_code == HTTPStatus.OK
+    return response.json()
+
+
+def create_authenticated_recipe(
+    client: TestClient,
+    *,
+    email: str | None = None,
+    name: str = "Homemade bread",
+    image_name: str = "bread.jpg",
+    password: str = "password123",
+) -> tuple[dict, dict, dict[str, str]]:
+    chef_email = email or unique_email("chef-recipe")
+    created_chef, headers = create_authenticated_chef(
+        client,
+        email=chef_email,
+        password=password,
+    )
+    created_recipe = create_recipe(
+        client,
+        headers,
+        name=name,
+        image_name=image_name,
+    )
+    return created_chef, created_recipe, headers
+
+
