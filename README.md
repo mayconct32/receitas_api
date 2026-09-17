@@ -143,6 +143,92 @@ A documentação Swagger da API fica disponível em `http://localhost:8000/docs`
 
 ![Swagger da API - receitas](docs/images/swagger_recipes.png)
 
+## Testes automatizados
+
+O projeto mantém uma suíte de testes focada em comportamento real das rotas HTTP, especialmente para `chefs` e `recipes`. A estratégia atual prioriza testes de integração via `FastAPI TestClient`, verificando status HTTP, payloads, autenticação e autorização, sem depender de testes de implementação interna que não sejam relevantes para a camada de API.
+
+### Comandos úteis
+
+```bash
+# rodar a suíte completa
+pytest -q
+
+# rodar apenas os testes de chefs
+pytest -q tests/test_chefs.py
+
+# rodar apenas os testes de receitas
+pytest -q tests/test_recipes.py
+
+# gerar relatório de cobertura
+pytest --cov=src --cov-report=term-missing -q
+pytest --cov=src --cov-report=html -q
+```
+
+### O que os testes cobrem
+
+- criação, listagem, consulta e exclusão de chefs
+- autenticação com JWT e variações de erro
+- validação de campos obrigatórios e conflitos de email/nome
+- autorização para edição e remoção apenas por proprietário
+- criação, consulta, atualização e exclusão de receitas
+- comportamento com imagem e sem imagem
+- payload inválido e casos de recurso inexistente
+- permissão de acesso e regras de ownership para receitas
+
+Esses testes foram escritos para refletir as rotas da aplicação e o contrato real do cliente, mantendo o padrão de verificação do projeto.
+
+## Armazenamento de imagens em receitas
+
+As receitas suportam upload opcional de imagem através do endpoint `POST /v1/recipes/` e `PUT /v1/recipes/{recipe_id}`.
+
+### Como a imagem é enviada
+
+A API usa `multipart/form-data` com dois campos:
+
+- `recipe_data`: JSON da receita
+- `image`: arquivo de imagem opcional
+
+Exemplo:
+
+```bash
+curl -X POST http://localhost:8000/v1/recipes/ \
+  -H "Authorization: Bearer <TOKEN>" \
+  -F 'recipe_data={"recipe_name":"Pão caseiro","description":"Receita simples","prep_time":"00:45:00","instructions":[{"step_number":1,"description":"Misture os ingredientes"}],"ingredients":[{"ingredient_name":"farinha","quantity":"500g"}]}' \
+  -F 'image=@/caminho/para/pao.jpg'
+```
+
+### Fluxo de armazenamento
+
+- a imagem é enviada ao serviço de storage
+- o backend gera um nome de arquivo e envia para um bucket S3 compatível
+- a URL pública do objeto é salva em `image_url`
+- se a receita for atualizada sem nova imagem, o valor atual é preservado
+- ao excluir a receita, a imagem associada também pode ser removida no storage
+
+### Ambiente de desenvolvimento
+
+O armazenamento é configurado com LocalStack, usando variáveis como:
+
+```env
+AWS_S3_BUCKET=recipes
+AWS_S3_ENDPOINT_URL=http://localstack:4566
+AWS_DEFAULT_REGION=us-east-1
+AWS_ACCESS_KEY_ID=test
+AWS_SECRET_ACCESS_KEY=test
+```
+
+Isso permite simular S3 localmente sem depender de um serviço externo em desenvolvimento.
+
+### Implementação do storage
+
+O projeto define um adaptador de storage em `src/services/storage_service.py`, com a classe `LocalstackS3Storage`, que encapsula:
+
+- `upload(...)` para enviar o arquivo
+- `delete(...)` para remover o arquivo
+- checagem de bucket e criação automática se necessário
+
+Nos testes, o comportamento do storage também é substituído por um stub/fake para isolar a API de infraestrutura externa e manter a suíte estável.
+
 ## Arquitetura e comportamento da aplicação
 
 ### Versionamento da API
@@ -215,39 +301,3 @@ cp .env.example .env
 ```
 
 Depois, ajuste os valores conforme o seu ambiente local ou o Docker.
-
-As variáveis principais são:
-
-```env
-MYSQL_HOST=mysql
-MYSQL_DATABASE=recipes_db
-MYSQL_USER=recipes_app
-MYSQL_PASSWORD=my_strong_password
-MYSQL_ROOT_PASSWORD=my_strong_password
-MYSQL_POOL_SIZE=5
-MYSQL_POOL_NAME=my_pool
-
-MONGO_HOST=mongo
-PORT_MONGO=27017
-MONGO_INITDB_ROOT_USERNAME=roott
-MONGO_INITDB_ROOT_PASSWORD=my_strong_password
-MONGO_INITDB_DATABASE=recipes
-MONGO_MIN_POOL_SIZE=5
-MONGO_MAX_POOL_SIZE=20
-
-REDIS_HOST=redis
-REDIS_PORT=6379
-REDIS_DB=0
-REDIS_MAX_CONNECTIONS=20
-
-ACCESS_TOKEN_EXPIRE_MINUTES=60
-SECRET_KEY=my_secret_key
-ALGORITHM=HS256
-PORT=8000
-
-AWS_S3_BUCKET=recipes
-AWS_S3_ENDPOINT_URL=http://localstack:4566
-AWS_DEFAULT_REGION=us-east-1
-AWS_ACCESS_KEY_ID=test
-AWS_SECRET_ACCESS_KEY=test
-```
