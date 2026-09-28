@@ -5,16 +5,16 @@ from http import HTTPStatus
 from jwt import InvalidTokenError, decode, encode
 
 from src.interfaces.repository import IChefRepository
-from src.repositories.redis_repository import RedisRepository
 from src.models.auth import FormData
+from src.services.cache_service import CacheService
 from src.exceptions import AuthenticationError, CredentialsError
 from src.utils import verify_password
 
 
 class AuthService:
-    def __init__(self, chef_repository: IChefRepository, redis_repository: RedisRepository) -> None:
+    def __init__(self, chef_repository: IChefRepository, cache_service: CacheService) -> None:
         self.chef_repository = chef_repository
-        self.redis_repository = redis_repository
+        self.cache_service = cache_service
 
     async def check_authentication(self, form_data: FormData):
         chef = await self.chef_repository.get_by_email(email=form_data.username)
@@ -54,12 +54,12 @@ class AuthService:
                 raise credentials_exception
         except InvalidTokenError:
             raise credentials_exception
-        cache = await self.redis_repository.get(f"chef:{email}")
+        cache = await self.cache_service.get(f"chef:{email}")
         if cache:
             return cache
         else:
             chef = await self.chef_repository.get_by_email(email=email)
             if not chef:
                 raise credentials_exception
-            await self.redis_repository.insert(f"chef:{email}",chef)
+            await self.cache_service.insert(f"chef:{email}", chef)
             return chef

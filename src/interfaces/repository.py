@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import List
+from typing import List, Any
 
 from src.models.chef import Chef
 from src.models.recipe import ResponseRecipe
@@ -37,4 +37,19 @@ class IChefRepository(IRepository[Chef]):
         raise NotImplementedError
 
 
-class IRecipeRepository(IRepository[ResponseRecipe]): ...
+class IRecipeRepository(IRepository[ResponseRecipe]):
+    pass
+
+
+class ICacheRepository(ABC):
+    @abstractmethod
+    async def insert(self, key: str, value: Any) -> None:
+        raise NotImplementedError
+
+    @abstractmethod
+    async def get(self, key: str) -> Any:
+        raise NotImplementedError
+
+    @abstractmethod
+    async def delete(self, *keys: str) -> None:
+        raise NotImplementedError

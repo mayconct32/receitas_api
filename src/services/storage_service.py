@@ -1,8 +1,11 @@
+import inspect
 import os
 from typing import Optional
+from uuid import uuid4
 
 import boto3
 from botocore.exceptions import BotoCoreError, ClientError
+from fastapi import UploadFile
 
 from src.interfaces.storage import IStorage
 
@@ -58,3 +61,46 @@ class LocalstackS3Storage(IStorage):
             return
 
         self.client.delete_object(Bucket=self.bucket_name, Key=file_name)
+
+
+class RecipeImageService:
+    def __init__(self, storage: IStorage) -> None:
+        self.storage = storage
+
+    @staticmethod
+    def _extract_file_name(image_url: str | None) -> str | None:
+        if not image_url:
+            return None
+        return image_url.split("/")[-1]
+
+    async def upload(self, image: UploadFile | None) -> str | None:
+        if image is None or not getattr(image, "filename", None):
+            return None
+
+        seek = getattr(image, "seek", None)
+        if seek is not None:
+            if inspect.iscoroutinefunction(seek):
+                await seek(0)
+            else:
+                seek(0)
+
+        read = getattr(image, "read")
+        if inspect.iscoroutinefunction(read):
+            file_bytes = await read()
+        else:
+            file_bytes = read()
+
+        file_name = f"{uuid4()}-{image.filename}"
+        content_type = getattr(image, "content_type", None) or "application/octet-stream"
+
+        return await self.storage.upload(
+            file_name=file_name,
+            file_bytes=file_bytes,
+            content_type=content_type,
+        )
+
+    async def delete(self, image_url: str | None) -> None:
+        file_name = self._extract_file_name(image_url)
+        if file_name is None:
+            return
+        await self.storage.delete(file_name=file_name)
