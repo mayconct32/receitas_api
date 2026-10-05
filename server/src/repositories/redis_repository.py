@@ -1,8 +1,8 @@
 import json
 from typing import Any, List
 
-from src.database import RedisConnection
-from src.interfaces.repository import ICacheRepository
+from ..database import RedisConnection
+from ..interfaces.repository import ICacheRepository
 
 
 class RedisRepository(ICacheRepository):

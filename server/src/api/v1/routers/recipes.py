@@ -3,16 +3,16 @@ from http import HTTPStatus
 
 from fastapi import APIRouter, File, Form, Request, UploadFile, HTTPException
 
-from src.dependencies import CurrentChef, RecipeServiceDep
-from src.models.recipe import Recipe, ResponseRecipe
-from src.rate_limiter import limiter
+from ....dependencies import CurrentChef, RecipeServiceDep
+from ....models.recipe import Recipe, ResponseRecipe
+from ....rate_limiter import limiter
 
 
 app = APIRouter(tags=["recipes"], prefix="/v1/recipes")
 
 
 @app.get("/", response_model=List[ResponseRecipe])
-@limiter.limit("5/minute")
+@limiter.limit("30/minute")
 async def get_recipes(
     request: Request,
     recipe_service: RecipeServiceDep,
@@ -23,7 +23,7 @@ async def get_recipes(
 
 
 @app.get("/my_recipes", response_model=List[ResponseRecipe])
-@limiter.limit("5/minute")
+@limiter.limit("30/minute")
 async def get_my_recipes(
     request: Request,
     recipe_service: RecipeServiceDep,
@@ -37,7 +37,7 @@ async def get_my_recipes(
 
 
 @app.get("/{recipe_id}", response_model=ResponseRecipe)
-@limiter.limit("5/minute")
+@limiter.limit("30/minute")
 async def get_recipe(
     request: Request, recipe_service: RecipeServiceDep, recipe_id: str
 ):
@@ -45,7 +45,7 @@ async def get_recipe(
 
 
 @app.post("/", response_model=ResponseRecipe)
-@limiter.limit("3/minute")
+@limiter.limit("15/minute")
 async def add_recipe(
     request: Request,
     current_chef: CurrentChef,
@@ -67,7 +67,7 @@ async def add_recipe(
 
 
 @app.delete("/{recipe_id}")
-@limiter.limit("3/minute")
+@limiter.limit("15/minute")
 async def delete_recipe(
     request: Request,
     recipe_service: RecipeServiceDep,
@@ -80,7 +80,7 @@ async def delete_recipe(
 
 
 @app.put("/{recipe_id}")
-@limiter.limit("3/minute")
+@limiter.limit("15/minute")
 async def update_recipe(
     request: Request,
     recipe_service: RecipeServiceDep,

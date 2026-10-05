@@ -1,4 +1,4 @@
-from src.interfaces.repository import ICacheRepository
+from ..interfaces.repository import ICacheRepository
 
 
 class CacheService(ICacheRepository):

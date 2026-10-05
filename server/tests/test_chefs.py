@@ -1,10 +1,12 @@
 from http import HTTPStatus
+import os
 from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
+from jwt import decode
 
-from tests.helpers import (
+from server.tests.helpers import (
     auth_headers,
     build_chef_payload,
     create_authenticated_chef,
@@ -125,6 +127,36 @@ class TestChefEndpoints:
         assert response.status_code == HTTPStatus.UNAUTHORIZED
         assert "Not authenticated" in response.json()["detail"]
 
+    def test_deleted_chef_token_is_rejected(self, client: TestClient):
+        email = unique_email("chef-ghost")
+        created, headers = create_authenticated_chef(client, email=email)
+
+        me = client.get("/v1/chefs/me", headers=headers)
+        assert me.status_code == HTTPStatus.OK
+
+        deleted = client.delete(
+            f"/v1/chefs/{created['chef_id']}", headers=headers
+        )
+        assert deleted.status_code == HTTPStatus.OK
+
+        response = client.get("/v1/chefs/me", headers=headers)
+
+        assert response.status_code == HTTPStatus.UNAUTHORIZED
+        assert response.json()["detail"] == "Could not validate credentials"
+
+    def test_access_token_contains_chef_id_for_current_user_validation(self, client: TestClient):
+        email = unique_email("chef-token-id")
+        created, headers = create_authenticated_chef(client, email=email)
+        token = headers["Authorization"].split(" ", 1)[1]
+        payload = decode(
+            token,
+            os.getenv("SECRET_KEY"),
+            algorithms=[os.getenv("ALGORITHM")],
+        )
+
+        assert payload["sub"] == email
+        assert payload["chef_id"] == created["chef_id"]
+
     def test_create_chef_missing_required_fields_returns_422(self, client: TestClient):
         response = client.post(
             "/v1/chefs/",
@@ -159,6 +191,66 @@ class TestChefEndpoints:
         assert response.status_code == HTTPStatus.OK
         assert response.json()["chef_name"] == "Updated Alice"
         assert response.json()["email"] != email
+        assert "access_token" not in response.json()
+
+    def test_update_chef_with_unchanged_credentials_does_not_conflict(self, client: TestClient):
+        email = unique_email("chef-update-same")
+        created, headers = create_authenticated_chef(client, email=email)
+
+        response = client.put(
+            f"/v1/chefs/{created['chef_id']}",
+            headers=headers,
+            json={
+                "chef_name": created["chef_name"],
+                "email": created["email"],
+                "password": "new-password",
+            },
+        )
+
+        assert response.status_code == HTTPStatus.OK
+        assert response.json()["chef_name"] == created["chef_name"]
+        assert response.json()["email"] == created["email"]
+
+    def test_update_chef_with_other_chef_credentials_returns_conflict(self, client: TestClient):
+        owner_email = unique_email("chef-owner-update-conflict")
+        created, headers = create_authenticated_chef(client, email=owner_email)
+        other = create_chef(client, email=unique_email("chef-other-conflict"))
+
+        response = client.put(
+            f"/v1/chefs/{created['chef_id']}",
+            headers=headers,
+            json={
+                "chef_name": other["chef_name"],
+                "email": created["email"],
+                "password": "new-password",
+            },
+        )
+
+        assert response.status_code == HTTPStatus.CONFLICT
+        assert response.json()["detail"] == "This name already exists!"
+
+    def test_token_remains_valid_after_chef_update(self, client: TestClient):
+        email = unique_email("chef-token-after-update")
+        created, headers = create_authenticated_chef(client, email=email)
+
+        new_email = unique_email("renamed-email")
+        updated = client.put(
+            f"/v1/chefs/{created['chef_id']}",
+            headers=headers,
+            json={
+                "chef_name": "Renamed Alice",
+                "email": new_email,
+                "password": "new-password",
+            },
+        )
+        assert updated.status_code == HTTPStatus.OK
+
+        response = client.get("/v1/chefs/me", headers=headers)
+
+        assert response.status_code == HTTPStatus.OK
+        assert response.json()["chef_id"] == created["chef_id"]
+        assert response.json()["chef_name"] == "Renamed Alice"
+        assert response.json()["email"] == new_email
 
     def test_delete_chef_removes_chef(self, client: TestClient):
         email = unique_email("chef-delete")
@@ -222,3 +314,87 @@ class TestChefEndpoints:
 
         assert response.status_code == HTTPStatus.UNAUTHORIZED
         assert response.json()["detail"] == "unauthorized request"
+
+    def test_update_chef_allows_self_unchanged_name_and_email_with_password_change(self, client: TestClient):
+        email = unique_email("chef-self-update")
+        created, headers = create_authenticated_chef(client, email=email)
+
+        response = client.put(
+            f"/v1/chefs/{created['chef_id']}",
+            headers=headers,
+            json={
+                "chef_name": created["chef_name"],
+                "email": created["email"],
+                "password": "new-password",
+            },
+        )
+
+        assert response.status_code == HTTPStatus.OK
+        assert response.json()["chef_name"] == created["chef_name"]
+        assert response.json()["email"] == created["email"]
+
+        reauth = client.post(
+            "/v1/chefs/auth",
+            data={"username": email, "password": "new-password"},
+        )
+        assert reauth.status_code == HTTPStatus.CREATED
+
+    def test_update_chef_only_password_keeps_other_fields(self, client: TestClient):
+        email = unique_email("chef-partial-update")
+        created, headers = create_authenticated_chef(client, email=email)
+
+        response = client.put(
+            f"/v1/chefs/{created['chef_id']}",
+            headers=headers,
+            json={"password": "new-password"},
+        )
+
+        assert response.status_code == HTTPStatus.OK
+        assert response.json()["chef_name"] == created["chef_name"]
+        assert response.json()["email"] == created["email"]
+
+        reauth = client.post(
+            "/v1/chefs/auth",
+            data={"username": email, "password": "new-password"},
+        )
+        assert reauth.status_code == HTTPStatus.CREATED
+
+    def test_update_chef_only_name_keeps_email_and_password(self, client: TestClient):
+        email = unique_email("chef-rename-only")
+        created, headers = create_authenticated_chef(client, email=email)
+
+        response = client.put(
+            f"/v1/chefs/{created['chef_id']}",
+            headers=headers,
+            json={"chef_name": "Renamed Only"},
+        )
+
+        assert response.status_code == HTTPStatus.OK
+        assert response.json()["chef_name"] == "Renamed Only"
+        assert response.json()["email"] == email
+
+        reauth = client.post(
+            "/v1/chefs/auth",
+            data={"username": email, "password": "password123"},
+        )
+        assert reauth.status_code == HTTPStatus.CREATED
+
+    def test_update_chef_does_not_return_access_token(self, client: TestClient):
+        email = unique_email("chef-fresh-token")
+        created, headers = create_authenticated_chef(client, email=email)
+        new_email = unique_email("fresh-token-email")
+
+        updated = client.put(
+            f"/v1/chefs/{created['chef_id']}",
+            headers=headers,
+            json={"email": new_email},
+        )
+        assert updated.status_code == HTTPStatus.OK
+        assert "access_token" not in updated.json()
+
+        me = client.get(
+            "/v1/chefs/me",
+            headers=headers,
+        )
+        assert me.status_code == HTTPStatus.OK
+        assert me.json()["email"] == new_email

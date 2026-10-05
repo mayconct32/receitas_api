@@ -3,18 +3,18 @@ from typing import Annotated
 from fastapi import Depends
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 
-from src.database import MongoDBConnection, MysqlDBConnection, RedisConnection
-from src.interfaces.connection_db import IDBConnection
-from src.interfaces.repository import IChefRepository, IRecipeRepository, ICacheRepository
-from src.interfaces.storage import IStorage
-from src.repositories.chef_repository import ChefRepository
-from src.repositories.recipe_repository import RecipeRepository
-from src.repositories.redis_repository import RedisRepository
-from src.services.auth_service import AuthService
-from src.services.cache_service import CacheService
-from src.services.chef_service import ChefService
-from src.services.recipe_service import RecipeService
-from src.services.storage_service import LocalstackS3Storage, RecipeImageService
+from .database import MongoDBConnection, MysqlDBConnection, RedisConnection
+from .interfaces.connection_db import IDBConnection
+from .interfaces.repository import IChefRepository, IRecipeRepository, ICacheRepository
+from .interfaces.storage import IStorage
+from .repositories.chef_repository import ChefRepository
+from .repositories.recipe_repository import RecipeRepository
+from .repositories.redis_repository import RedisRepository
+from .services.auth_service import AuthService
+from .services.cache_service import CacheService
+from .services.chef_service import ChefService
+from .services.recipe_service import RecipeService
+from .services.storage_service import LocalstackS3Storage, RecipeImageService
 
 
 def get_redis_repository() -> ICacheRepository:
@@ -55,9 +55,8 @@ def get_chef_service(
 
 def get_auth_service(
     chef_repository: IChefRepository = Depends(get_chef_repository),
-    cache_service: CacheService = Depends(get_cache_service),
 ) -> AuthService:
-    return AuthService(chef_repository, cache_service)
+    return AuthService(chef_repository)
 
 
 async def get_current_chef(

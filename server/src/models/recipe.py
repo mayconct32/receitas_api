@@ -21,7 +21,6 @@ class Recipe(BaseModel):
     prep_time: str  # "11:12:00"
     instructions: List[Instruction]
     ingredients: List[Ingredient]
-    image_url: str | None = None
 
     @classmethod
     def from_json(cls, raw_recipe_data: str | None) -> "Recipe":
@@ -52,5 +51,6 @@ class DBRecipe(BaseModel):
     updated_at: datetime
 
 
-class ResponseRecipe(Recipe, DBRecipe): ...
+class ResponseRecipe(Recipe, DBRecipe):
+    image_url: str | None = None
 

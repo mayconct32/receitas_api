@@ -1,11 +1,9 @@
 from http import HTTPStatus
 
-from src.exceptions import *
-from src.interfaces.repository import IChefRepository
-from src.models.auth import FormData
-from src.models.chef import Chef, ResponseChef
-from src.services.cache_service import CacheService
-from src.utils import verify_password
+from ..exceptions import *
+from ..interfaces.repository import IChefRepository
+from ..models.chef import Chef, ResponseChef, UpdateChef
+from .cache_service import CacheService
 
 
 class ChefService:
@@ -13,28 +11,29 @@ class ChefService:
         self.chef_repository = chef_repository
         self.cache_service = cache_service
 
-    async def check_authentication(self, form_data: FormData):
-        chef = await self.chef_repository.get_by_email(email=form_data.username)
-        if not chef or not verify_password(form_data.password, chef["password_hash"]):
-            raise AuthenticationError(
-                message="Incorrect username or password!",
-                status_code=HTTPStatus.FORBIDDEN,
-            )
+    async def _verify_credentials(
+        self,
+        chef_name: str | None = None,
+        email: str | None = None,
+        current_chef_id: str | None = None,
+        current_chef_name: str | None = None,
+        current_chef_email: str | None = None,
+    ):
+        if chef_name is not None and chef_name != current_chef_name:
+            conflicting_name = await self.chef_repository.get_by_chef_name(chef_name=chef_name)
+            if conflicting_name and conflicting_name["chef_id"] != current_chef_id:
+                raise ConflictingNameError(
+                    message="This name already exists!",
+                    status_code=HTTPStatus.CONFLICT,
+                )
 
-    async def _verify_credentials(self, chef_name: str, email: str):
-        conflicting_name = await self.chef_repository.get_by_chef_name(chef_name=chef_name)
-        if conflicting_name:
-            raise ConflictingNameError(
-                message="This name already exists!",
-                status_code=HTTPStatus.CONFLICT,
-            )
-
-        conflicting_email = await self.chef_repository.get_by_email(email=email)
-        if conflicting_email:
-            raise ConflictingEmailError(
-                message="This email already exists!",
-                status_code=HTTPStatus.CONFLICT,
-            )
+        if email is not None and email != current_chef_email:
+            conflicting_email = await self.chef_repository.get_by_email(email=email)
+            if conflicting_email and conflicting_email["chef_id"] != current_chef_id:
+                raise ConflictingEmailError(
+                    message="This email already exists!",
+                    status_code=HTTPStatus.CONFLICT,
+                )
 
     async def _get_chef_or_404(self, chef_id: str):
         chef = await self.chef_repository.get(id=chef_id)
@@ -93,11 +92,17 @@ class ChefService:
         )
         return {"message": "Chef successfully excluded"}
 
-    async def update_chef(self, updated_chef: Chef, chef_id, current_chef) -> ResponseChef:
+    async def update_chef(self, updated_chef: UpdateChef, chef_id, current_chef) -> ResponseChef:
         self.check_authorization(chef_id, current_chef["chef_id"])
-        await self._verify_credentials(updated_chef.chef_name, updated_chef.email)
+        await self._verify_credentials(
+            updated_chef.chef_name,
+            updated_chef.email,
+            current_chef_id=current_chef["chef_id"],
+            current_chef_name=current_chef.get("chef_name"),
+            current_chef_email=current_chef.get("email"),
+        )
         await self.chef_repository.update(current_chef["chef_id"], updated_chef)
         await self.cache_service.delete(
             f"chef:{current_chef['chef_id']}", "chefs:*"
         )
-        return await self.chef_repository.get_by_email(email=updated_chef.email)
+        return await self.chef_repository.get(id=current_chef["chef_id"])

@@ -4,17 +4,15 @@ from http import HTTPStatus
 
 from jwt import InvalidTokenError, decode, encode
 
-from src.interfaces.repository import IChefRepository
-from src.models.auth import FormData
-from src.services.cache_service import CacheService
-from src.exceptions import AuthenticationError, CredentialsError
-from src.utils import verify_password
+from ..exceptions import AuthenticationError, CredentialsError
+from ..interfaces.repository import IChefRepository
+from ..models.auth import FormData
+from ..utils import verify_password
 
 
 class AuthService:
-    def __init__(self, chef_repository: IChefRepository, cache_service: CacheService) -> None:
+    def __init__(self, chef_repository: IChefRepository) -> None:
         self.chef_repository = chef_repository
-        self.cache_service = cache_service
 
     async def check_authentication(self, form_data: FormData):
         chef = await self.chef_repository.get_by_email(email=form_data.username)
@@ -23,10 +21,10 @@ class AuthService:
                 message="Incorrect username or password!",
                 status_code=HTTPStatus.FORBIDDEN,
             )
+        return chef
 
-    @staticmethod
-    async def create_access_token(form_data: FormData):
-        to_encode = {"sub": form_data.username}
+    async def create_access_token(self, email: str, chef_id: str):
+        to_encode = {"sub": email, "chef_id": chef_id}
         expire = datetime.now(timezone.utc) + timedelta(
             minutes=int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES"))
         )
@@ -49,17 +47,13 @@ class AuthService:
                 os.getenv("SECRET_KEY"),
                 algorithms=[os.getenv("ALGORITHM")],
             )
-            email = payload.get("sub")
-            if email is None:
+            chef_id = payload.get("chef_id")
+            if chef_id is None:
                 raise credentials_exception
         except InvalidTokenError:
             raise credentials_exception
-        cache = await self.cache_service.get(f"chef:{email}")
-        if cache:
-            return cache
-        else:
-            chef = await self.chef_repository.get_by_email(email=email)
-            if not chef:
-                raise credentials_exception
-            await self.cache_service.insert(f"chef:{email}", chef)
-            return chef
+
+        chef = await self.chef_repository.get(id=chef_id)
+        if not chef:
+            raise credentials_exception
+        return chef

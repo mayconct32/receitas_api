@@ -2,18 +2,19 @@ import time
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
 
-from src.api.v1.routers.chefs import app as chefs
-from src.api.v1.routers.recipes import app as recipes
-from src.rate_limiter import limiter
-from src.exceptions import DomainException
+from .api.v1.routers.chefs import app as chefs
+from .api.v1.routers.recipes import app as recipes
+from .rate_limiter import limiter
+from .exceptions import DomainException
 
 
 app = FastAPI()
 
 
 @app.get("/")
-@limiter.limit("6/minute")
+@limiter.limit("30/minute")
 def hello_world(request: Request):
     return {"message": "hello world!"}
 
@@ -34,6 +35,13 @@ def validation_Exception_handler(request, exc: DomainException):
         content={"detail": exc.message}
     )
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=['*'],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 app.include_router(chefs)
 app.include_router(recipes)

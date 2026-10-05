@@ -2,9 +2,9 @@ from datetime import datetime
 from typing import List
 from uuid import uuid4
 
-from src.interfaces.connection_db import IDBConnection
-from src.interfaces.repository import IRecipeRepository
-from src.models.recipe import Recipe, ResponseRecipe
+from ..interfaces.connection_db import IDBConnection
+from ..interfaces.repository import IRecipeRepository
+from ..models.recipe import Recipe, ResponseRecipe
 
 
 class RecipeRepository(IRecipeRepository):
@@ -60,13 +60,14 @@ class RecipeRepository(IRecipeRepository):
             )
             return response["cursor"]["firstBatch"]
 
-    async def add(self, recipe: Recipe, current_chef_id: str):
+    async def add(self, recipe: Recipe | dict, current_chef_id: str):
         async with self.connection:
             unique_id = uuid4()
+            recipe_payload = recipe.model_dump() if hasattr(recipe, "model_dump") else recipe
             db_recipe = {
                 "recipe_id": str(unique_id),
                 "chef_id": current_chef_id,
-                **recipe.model_dump(),
+                **recipe_payload,
                 "posted_at": datetime.now(),
                 "updated_at": datetime.now(),
             }
@@ -100,8 +101,9 @@ class RecipeRepository(IRecipeRepository):
                 }
             )
 
-    async def update(self, recipe_id: str, recipe: Recipe):
+    async def update(self, recipe_id: str, recipe: Recipe | dict):
         async with self.connection:
+            recipe_payload = recipe.model_dump() if hasattr(recipe, "model_dump") else recipe
             await self.connection.execute(
                 {
                     "update": self.collection_name
@@ -113,7 +115,7 @@ class RecipeRepository(IRecipeRepository):
                                 "recipe_id": recipe_id
                             },
                             "u": {
-                                "$set": recipe.model_dump()
+                                "$set": recipe_payload
                             },
                             "upsert": False,
                         }

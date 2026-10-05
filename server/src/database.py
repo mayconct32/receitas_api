@@ -6,7 +6,7 @@ from pymongo import AsyncMongoClient
 from pymongo.asynchronous.database import AsyncDatabase
 from redis import asyncio
 
-from src.interfaces.connection_db import IDBConnection
+from .interfaces.connection_db import IDBConnection
 
 
 load_dotenv(override=True)

@@ -2,11 +2,11 @@ from http import HTTPStatus
 
 from fastapi import UploadFile
 
-from src.exceptions import AuthorizationError, RecipeErrorNotFound
-from src.interfaces.repository import IRecipeRepository
-from src.models.recipe import Recipe
-from src.services.cache_service import CacheService
-from src.services.storage_service import RecipeImageService
+from ..exceptions import AuthorizationError, RecipeErrorNotFound
+from ..interfaces.repository import IRecipeRepository
+from ..models.recipe import Recipe
+from .cache_service import CacheService
+from .storage_service import RecipeImageService
 
 
 class RecipeService:
@@ -21,7 +21,7 @@ class RecipeService:
         self.image_handler = image_handler
 
     async def _upload_recipe_image(self, image: UploadFile | None) -> str | None:
-        if self.image_handler is None:
+        if self.image_handler is None or image is None:
             return None
         return await self.image_handler.upload(image)
 
@@ -44,16 +44,20 @@ class RecipeService:
 
     async def _replace_recipe_image(self, recipe_id: str, recipe: Recipe, image: UploadFile | None):
         current_recipe = await self._get_recipe_or_404(recipe_id)
-        new_image_url = await self._upload_recipe_image(image)
+        recipe_payload = recipe.model_dump()
 
-        if new_image_url:
-            if current_recipe.get("image_url") and self.image_handler is not None:
-                await self.image_handler.delete(current_recipe["image_url"])
-            recipe.image_url = new_image_url
+        if image is not None:
+            new_image_url = await self._upload_recipe_image(image)
+            if new_image_url:
+                if current_recipe.get("image_url") and self.image_handler is not None:
+                    await self.image_handler.delete(current_recipe["image_url"])
+                recipe_payload["image_url"] = new_image_url
+            elif current_recipe.get("image_url"):
+                recipe_payload["image_url"] = current_recipe["image_url"]
         elif current_recipe.get("image_url"):
-            recipe.image_url = current_recipe["image_url"]
+            recipe_payload["image_url"] = current_recipe["image_url"]
 
-        return recipe
+        return recipe_payload
 
     async def _invalidate_recipe_cache(self, current_chef_id: str, recipe_id: str):
         await self.cache_service.delete(
@@ -112,11 +116,13 @@ class RecipeService:
         current_chef_id: str,
         image: UploadFile | None = None,
     ):
-        image_url = await self._upload_recipe_image(image)
-        if image_url:
-            recipe.image_url = image_url
+        recipe_payload = recipe.model_dump()
+        if image is not None:
+            image_url = await self._upload_recipe_image(image)
+            if image_url:
+                recipe_payload["image_url"] = image_url
 
-        db_recipe = await self.recipe_repository.add(recipe, current_chef_id)
+        db_recipe = await self.recipe_repository.add(recipe_payload, current_chef_id)
         await self.cache_service.delete(
             f"my_recipes:{current_chef_id}:*",
             "recipes:*",
@@ -145,7 +151,7 @@ class RecipeService:
         image: UploadFile | None = None,
     ):
         await self._authorize_recipe_owner(current_chef_id, recipe_id)
-        recipe = await self._replace_recipe_image(recipe_id, recipe, image)
-        await self.recipe_repository.update(recipe_id, recipe)
+        recipe_payload = await self._replace_recipe_image(recipe_id, recipe, image)
+        await self.recipe_repository.update(recipe_id, recipe_payload)
         await self._invalidate_recipe_cache(current_chef_id, recipe_id)
-        return recipe
+        return recipe_payload

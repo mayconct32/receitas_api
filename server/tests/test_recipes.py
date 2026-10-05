@@ -1,3 +1,4 @@
+import asyncio
 import json
 from http import HTTPStatus
 from io import BytesIO
@@ -5,7 +6,9 @@ from io import BytesIO
 import pytest
 from fastapi.testclient import TestClient
 
-from tests.helpers import (
+from server.src.services.storage_service import LocalstackS3Storage
+
+from server.tests.helpers import (
     auth_headers,
     create_authenticated_chef,
     create_chef,
@@ -16,6 +19,39 @@ from tests.helpers import (
 
 
 class TestRecipeEndpoints:
+    def test_localstack_returns_public_image_url_for_browser(self, monkeypatch):
+        class FakeClient:
+            def head_bucket(self, Bucket):
+                return None
+
+            def create_bucket(self, Bucket):
+                return None
+
+            def put_object(self, **kwargs):
+                return None
+
+        monkeypatch.setenv("AWS_S3_BUCKET", "recipes")
+        monkeypatch.setenv("AWS_S3_ENDPOINT_URL", "http://localstack:4566")
+        monkeypatch.setenv("AWS_S3_PUBLIC_ENDPOINT_URL", "http://localhost:4566")
+        monkeypatch.setenv("AWS_DEFAULT_REGION", "us-east-1")
+        monkeypatch.setenv("AWS_ACCESS_KEY_ID", "test")
+        monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "test")
+        monkeypatch.setattr(
+            "server.src.services.storage_service.boto3.client",
+            lambda *args, **kwargs: FakeClient(),
+        )
+
+        storage = LocalstackS3Storage()
+        url = asyncio.run(
+            storage.upload(
+                file_name="abc.jpg",
+                file_bytes=b"fake-image",
+                content_type="image/jpeg",
+            )
+        )
+
+        assert url == "http://localhost:4566/recipes/abc.jpg"
+
     def test_add_recipe_with_image(self, client: TestClient):
         email = unique_email("chef-recipe")
         create_chef(client, email=email)

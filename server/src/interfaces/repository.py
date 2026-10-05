@@ -1,8 +1,8 @@
 from abc import ABC, abstractmethod
 from typing import List, Any
 
-from src.models.chef import Chef
-from src.models.recipe import ResponseRecipe
+from ..models.chef import Chef, UpdateChef
+from ..models.recipe import ResponseRecipe
 
 
 class IRepository[T](ABC):
@@ -28,6 +28,10 @@ class IRepository[T](ABC):
 
 
 class IChefRepository(IRepository[Chef]):
+    @abstractmethod
+    async def update(self, id: int, data: Chef | UpdateChef) -> None:
+        raise NotImplementedError
+
     @abstractmethod
     async def get_by_chef_name(self, chef_name: str) -> Chef:
         raise NotImplementedError

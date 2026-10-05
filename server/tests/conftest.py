@@ -10,9 +10,9 @@ from testcontainers.community.mongodb import MongoDbContainer
 from testcontainers.community.mysql import MySqlContainer
 from testcontainers.community.redis import RedisContainer
 
-from src import dependencies as deps
-from src.main import app
-from src.rate_limiter import limiter
+from server.src import dependencies as deps
+from server.src.main import app
+from server.src.rate_limiter import limiter
 
 
 os.environ.setdefault("ACCESS_TOKEN_EXPIRE_MINUTES", "60")

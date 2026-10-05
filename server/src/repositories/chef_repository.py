@@ -1,11 +1,11 @@
 from datetime import datetime
-from typing import List
+from typing import Any, List
 from uuid import uuid4
 
-from src.interfaces.connection_db import IDBConnection
-from src.interfaces.repository import IChefRepository
-from src.models.chef import Chef
-from src.utils import hash
+from ..interfaces.connection_db import IDBConnection
+from ..interfaces.repository import IChefRepository
+from ..models.chef import Chef, UpdateChef
+from ..utils import hash
 
 
 class ChefRepository(IChefRepository):
@@ -101,21 +101,27 @@ class ChefRepository(IChefRepository):
             (id,),
         )
 
-    async def update(self, id: str, data: Chef) -> None:
+    async def update(self, id: str, data: Chef | UpdateChef) -> None:
+        # Only the provided fields are updated, so a single field can be
+        # changed without overwriting the others.
+        fields: dict[str, Any] = {
+            "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        }
+        if data.chef_name is not None:
+            fields["chef_name"] = data.chef_name
+        if data.email is not None:
+            fields["email"] = data.email
+        if data.password is not None:
+            fields["password_hash"] = hash(data.password)
+
+        set_clause = ", ".join(f"{column} = %s" for column in fields)
+        values = (*fields.values(), id)
+
         await self.connection.execute(
-            """
+            f"""
             UPDATE chef SET
-                chef_name = %s,
-                email = %s,
-                updated_at = %s,
-                password_hash = %s
+                {set_clause}
             WHERE chef_id = %s;
         """,
-            (
-                data.chef_name,
-                data.email,
-                datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                hash(data.password),
-                id,
-            ),
+            values,
         )
