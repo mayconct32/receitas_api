@@ -139,9 +139,9 @@ Quando a imagem é enviada, a API armazena a URL pública do objeto no campo `im
 
 A documentação Swagger da API fica disponível em `http://localhost:8000/docs` quando a aplicação está em execução.
 
-![Swagger da API - chefs](docs/images/swagger_chefs.png)
+![Swagger da API - chefs](../docs/backend/swagger_chefs.png)
 
-![Swagger da API - receitas](docs/images/swagger_recipes.png)
+![Swagger da API - receitas](../docs/backend/swagger_recipes.png)
 
 ## Testes automatizados
 
